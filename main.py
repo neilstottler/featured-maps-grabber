@@ -4,6 +4,7 @@ import re
 import os
 import tempfile
 import bz2
+from zipfile import ZipFile
 
 # 3rd Party Imports
 from bs4 import BeautifulSoup
@@ -13,6 +14,11 @@ import httpx
 feature_page = requests.get("https://tf2maps.net/downloads/featured")
 
 print("hello")
+with open("mapcycle.txt", "w") as f:
+    f.write("Starting Mapcycle File.\n")
+
+with open("errors.txt", "w") as f:
+    f.write("Starting Error Log.\n")
 
 async def main():
     featured_soup = BeautifulSoup(feature_page.content, 'html.parser')
@@ -54,9 +60,17 @@ async def main():
 
                     #bz2 check
                     if filename.endswith(".bz2"):
-                        print("Unzipping.")
-                        map_decompressed = bz2.decompress(filename)
+                        print("Decompressing.")
+                        map_decompressed = bz2.BZ2File(filename).read()
                         print(map_decompressed)
+
+                    if filename.endswith(".zip"):
+                        print("Unzipping.")
+                        with ZipFile(filepath) as zipObject:
+                            splited = filename.split(".")
+                            zipObject.extractall(path=os.getcwd() + "/maps/" + str(splited[0]))
+                            pass
+
 
             except:
                 with open("errors.txt", "a") as f:
