@@ -3,6 +3,7 @@ import asyncio
 import re
 import os
 import tempfile
+import bz2
 
 # 3rd Party Imports
 from bs4 import BeautifulSoup
@@ -10,6 +11,8 @@ import requests
 import httpx
 
 feature_page = requests.get("https://tf2maps.net/downloads/featured")
+
+print("hello")
 
 async def main():
     featured_soup = BeautifulSoup(feature_page.content, 'html.parser')
@@ -29,31 +32,39 @@ async def main():
                 with open("errors.txt", "a") as f:
                     title = download_soup.select(".p-title-value")[0].text.strip()
                     download_link = download_soup.select(".button--icon--redirect")[0].get("href")
-                    f.write("External download for: " + str(title) + " " + str(download_link) + "\n")
+                    f.write("External download for: " + str(title.rstrip()) + "\n")
 
             #download the file to /maps/
 
             try:
                 filename = await get_download_filename("https://tf2maps.net" + href)
                 filepath = str(os.getcwd()) + "/maps/" + str(filename)
+
+                maps = ['arena_', 'cp_', 'ctf_', 'koth_', 'pass_', 'pd_', 'pl_', 'plr_', 'sd_']
+
+                #filter for mvm maps
+                if filename.startswith(tuple(maps)):
+                    print("Downloading: " + filename)
+                    await download_file("https://tf2maps.net" + href, filepath)
+
+                    #print to mapcycle file
+                    with open("mapcycle.txt", "a") as f:
+                            splited = filename.split(".")
+                            f.write(splited[0] + "\n")
+
+                    #bz2 check
+                    if filename.endswith(".bz2"):
+                        print("Unzipping.")
+                        map_decompressed = bz2.decompress(filename)
+                        print(map_decompressed)
+
             except:
                 with open("errors.txt", "a") as f:
                     title = download_soup.select(".p-title-value")[0].text.strip()
-                    f.write("Error downloading: " + str(title) + "\n")
+                    f.write("Error downloading: " + str(title.rstrip()) + "\n")
 
-
-            #filter for mvm maps
-            if not re.match("^mvm_[a-z]", filename) or not re.match("^FGD5_[A-z]", filename):
-                print("Downloading: " + filename)
-                await download_file("https://tf2maps.net" + href, filepath)
-
-            #print to mapcycle file
-            with open("mapcycle.txt", "a") as f:
-                #filter for mvm maps
-                if not re.match("^mvm_[a-z]", filename) or not re.match("^FGD5_[A-z]", filename):
-                    splited = filename.split(".")
-                    f.write(splited[0] + "\n")
-    
+async def unzip_file(file):
+    pass
 
 async def download_file(link, destination):
     async with httpx.AsyncClient() as client:
