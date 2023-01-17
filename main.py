@@ -4,7 +4,8 @@ import re
 import os
 import tempfile
 import bz2
-from zipfile import ZipFile
+from zipfile import ZipFile, Path
+import shutil
 
 # 3rd Party Imports
 from bs4 import BeautifulSoup
@@ -28,6 +29,7 @@ async def main():
         if re.match("^\/(downloads)\/[a-z]", link):
             #download page
             download_page = "https://tf2maps.net" + link
+            print(download_page)
 
             #download page soup
             download_soup = BeautifulSoup(requests.get(download_page).content, 'html.parser')
@@ -39,43 +41,78 @@ async def main():
                     title = download_soup.select(".p-title-value")[0].text.strip()
                     download_link = download_soup.select(".button--icon--redirect")[0].get("href")
                     f.write("External download for: " + str(title.rstrip()) + "\n")
+                    downloaded_filename = ''
+
+                    #this stops duplicates in the mapcycle for some reason???
+                    href = ''
 
             #download the file to /maps/
-
             try:
-                filename = await get_download_filename("https://tf2maps.net" + href)
-                filepath = str(os.getcwd()) + "/maps/" + str(filename)
+                downloaded_filename = await get_download_filename("https://tf2maps.net" + href)
+                print(downloaded_filename)
+                print(href)
+                filepath = str(os.getcwd()) + "/maps/" + str(downloaded_filename)
 
                 maps = ['arena_', 'cp_', 'ctf_', 'koth_', 'pass_', 'pd_', 'pl_', 'plr_', 'sd_']
 
                 #filter for mvm maps
-                if filename.startswith(tuple(maps)):
-                    print("Downloading: " + filename)
-                    await download_file("https://tf2maps.net" + href, filepath)
+                if downloaded_filename.startswith(tuple(maps)):
+                    if downloaded_filename.endswith(".bsp"):
+                        print("Downloading: " + downloaded_filename)
+                        await download_file("https://tf2maps.net" + href, filepath)
 
-                    #print to mapcycle file
-                    with open("mapcycle.txt", "a") as f:
-                            splited = filename.split(".")
-                            f.write(splited[0] + "\n")
+                        await add_to_mapcycle(downloaded_filename)
 
                     #bz2 check
-                    if filename.endswith(".bz2"):
-                        print("Decompressing.")
-                        map_decompressed = bz2.BZ2File(filename).read()
-                        print(map_decompressed)
+                    if downloaded_filename.endswith(".bz2"):
+                        await download_file("https://tf2maps.net" + href, filepath)
+                        print(f"Decompressing {downloaded_filename}.")
 
-                    if filename.endswith(".zip"):
-                        print("Unzipping.")
-                        with ZipFile(filepath) as zipObject:
-                            splited = filename.split(".")
-                            zipObject.extractall(path=os.getcwd() + "/maps/" + str(splited[0]))
-                            pass
+                        zipfile = bz2.BZ2File(filepath) # open the file
+                        data = zipfile.read() # get the decompressed data
+                        newfilepath = filepath[:-4] # assuming the filepath ends with .bz2
+                        open(newfilepath, 'wb').write(data) # write a uncompressed file
 
+                        #remove bz2
+
+                        #this isnt working for some reason
+                        os.remove(os.getcwd() + '/maps/' + downloaded_filename)
+
+                        await add_to_mapcycle(downloaded_filename)
+
+                    #zip check
+                    if downloaded_filename.endswith(".zip"):
+                        await download_file("https://tf2maps.net" + href, filepath)
+                        print(f"Unzipping {downloaded_filename}.")
+                        
+                        #unzip the zip
+                        with ZipFile(filepath) as originalzip:
+                            zipcontents = ZipFile.infolist(originalzip)
+                            for file in zipcontents:
+                                #check for bsp in folders
+                                if file.filename.endswith('.bsp'):
+
+                                    desired_file = file.filename.split('/')
+
+                                    #get it
+                                    with open('maps/' + desired_file[1], 'wb') as fileoutput:
+                                        fileoutput.write(originalzip.read(str(file.filename)))
+
+                        #delete zip
+                        os.remove(os.getcwd() + '/maps/' + downloaded_filename)
+
+                        await add_to_mapcycle(downloaded_filename)
 
             except:
                 with open("errors.txt", "a") as f:
                     title = download_soup.select(".p-title-value")[0].text.strip()
                     f.write("Error downloading: " + str(title.rstrip()) + "\n")
+
+async def add_to_mapcycle(mapname):
+    #print to mapcycle file
+    with open("mapcycle.txt", "a") as f:
+        splited = mapname.split(".")
+        f.write(splited[0] + "\n")
 
 async def unzip_file(file):
     pass
