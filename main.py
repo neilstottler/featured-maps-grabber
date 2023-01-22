@@ -21,7 +21,12 @@ with open("mapcycle.txt", "w") as f:
 with open("errors.txt", "w") as f:
     f.write("Starting Error Log.\n")
 
+#store the bsp name for later use
+bsp_file_name = 'bsp name'
+
 async def main():
+    global bsp_file_name
+
     featured_soup = BeautifulSoup(feature_page.content, 'html.parser')
     
     for a in featured_soup.find_all('a', "avatar--s", href=True):
@@ -52,12 +57,20 @@ async def main():
 
                 maps = ['arena_', 'cp_', 'ctf_', 'koth_', 'pass_', 'pd_', 'pl_', 'plr_', 'sd_']
 
+
                 #filter for mvm maps
                 if downloaded_filename.startswith(tuple(maps)):
                     if downloaded_filename.endswith(".bsp"):
+                        #setr the name for consistency
+                        bsp_file_name = downloaded_filename
+
                         print("Downloading: " + downloaded_filename)
                         await download_file("https://tf2maps.net" + href, filepath)
                         await add_to_mapcycle(downloaded_filename)
+
+
+                        #compress for redirect
+                        await compress_file(downloaded_filename)
 
                     #bz2 check
                     if downloaded_filename.endswith(".bz2"):
@@ -65,6 +78,9 @@ async def main():
                         print(f"Decompressing {downloaded_filename}.")
                         await bz2_decompress(filepath, downloaded_filename)
                         await add_to_mapcycle(downloaded_filename)
+
+                        #compress for redirect
+                        await compress_file(bsp_file_name)
 
                     #zip check
                     if downloaded_filename.endswith(".zip"):
@@ -74,6 +90,10 @@ async def main():
                         
                         await unzip_file(filepath, downloaded_filename)
                         await add_to_mapcycle(downloaded_filename)
+
+                        #compress for redirect
+                        print(bsp_file_name)
+                        await compress_file(bsp_file_name)
 
 
             except Exception as e:
@@ -93,15 +113,31 @@ async def add_to_mapcycle(mapname):
         f.write(splited[0] + "\n")
 
 async def bz2_decompress(filepath, downloaded_filename):
+    global bsp_file_name
+
     with bz2.BZ2File(filepath) as f:
         data = f.read()
         newfilepath = filepath[:-4]
         open(newfilepath, 'wb').write(data)
 
+        bsp_file_name = str(newfilepath).split('/')[-1]
+
     #remove bz2 after extracting
     os.remove(os.getcwd() + '/maps/' + downloaded_filename)
 
+async def compress_file(filepath):
+    print(f'Compressing {filepath} for redirect.')
+    output_filepath = os.getcwd() + '/compressed_maps/' + f"{filepath}.bz2"
+
+    with open('maps/' + filepath, 'rb') as input:
+        with bz2.BZ2File(output_filepath, 'wb') as output:
+            shutil.copyfileobj(input, output)
+
+    return output_filepath
+
 async def unzip_file(filepath, downloaded_filename):
+    global bsp_file_name
+    
     with ZipFile(filepath) as originalzip:
         zipcontents = ZipFile.infolist(originalzip)
         for file in zipcontents:
@@ -115,9 +151,15 @@ async def unzip_file(filepath, downloaded_filename):
                     #get it
                     with open('maps/' + desired_file[1], 'wb') as fileoutput:
                         fileoutput.write(originalzip.read(str(file.filename)))
+                        
+                        #set this value for bz2 compression later
+                        bsp_file_name = str(desired_file[1])
                 else:
                     with open('maps/' + file.filename, 'wb') as fileoutput:
                         fileoutput.write(originalzip.read(str(file.filename)))
+
+                        #set this value for bz2 compression later
+                        bsp_file_name = str(file.filename)
     
     #remove zip file
     os.remove(os.getcwd() + '/maps/' + downloaded_filename)
